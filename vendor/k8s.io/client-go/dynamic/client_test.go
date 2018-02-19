@@ -25,16 +25,15 @@ import (
 	"reflect"
 	"testing"
 
-	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/v1"
-	metav1 "k8s.io/client-go/pkg/apis/meta/v1"
-	"k8s.io/client-go/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/pkg/runtime"
-	"k8s.io/client-go/pkg/runtime/schema"
-	"k8s.io/client-go/pkg/runtime/serializer/streaming"
-	"k8s.io/client-go/pkg/watch"
-	"k8s.io/client-go/pkg/watch/versioned"
-	"k8s.io/client-go/rest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer/streaming"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
+	restclient "k8s.io/client-go/rest"
+	restclientwatch "k8s.io/client-go/rest/watch"
 )
 
 func getJSON(version, kind, name string) []byte {
@@ -59,11 +58,11 @@ func getObject(version, kind, name string) *unstructured.Unstructured {
 	}
 }
 
-func getClientServer(gv *schema.GroupVersion, h func(http.ResponseWriter, *http.Request)) (*Client, *httptest.Server, error) {
+func getClientServer(gv *schema.GroupVersion, h func(http.ResponseWriter, *http.Request)) (Interface, *httptest.Server, error) {
 	srv := httptest.NewServer(http.HandlerFunc(h))
-	cl, err := NewClient(&rest.Config{
+	cl, err := NewClient(&restclient.Config{
 		Host:          srv.URL,
-		ContentConfig: rest.ContentConfig{GroupVersion: gv},
+		ContentConfig: restclient.ContentConfig{GroupVersion: gv},
 	})
 	if err != nil {
 		srv.Close()
@@ -91,9 +90,9 @@ func TestList(t *testing.T) {
 					"apiVersion": "vTest",
 					"kind":       "rTestList",
 				},
-				Items: []*unstructured.Unstructured{
-					getObject("vTest", "rTest", "item1"),
-					getObject("vTest", "rTest", "item2"),
+				Items: []unstructured.Unstructured{
+					*getObject("vTest", "rTest", "item1"),
+					*getObject("vTest", "rTest", "item2"),
 				},
 			},
 		},
@@ -109,9 +108,9 @@ func TestList(t *testing.T) {
 					"apiVersion": "vTest",
 					"kind":       "rTestList",
 				},
-				Items: []*unstructured.Unstructured{
-					getObject("vTest", "rTest", "item1"),
-					getObject("vTest", "rTest", "item2"),
+				Items: []unstructured.Unstructured{
+					*getObject("vTest", "rTest", "item1"),
+					*getObject("vTest", "rTest", "item2"),
 				},
 			},
 		},
@@ -137,7 +136,7 @@ func TestList(t *testing.T) {
 		}
 		defer srv.Close()
 
-		got, err := cl.Resource(resource, tc.namespace).List(&v1.ListOptions{})
+		got, err := cl.Resource(resource, tc.namespace).List(metav1.ListOptions{})
 		if err != nil {
 			t.Errorf("unexpected error when listing %q: %v", tc.name, err)
 			continue
@@ -151,6 +150,7 @@ func TestList(t *testing.T) {
 
 func TestGet(t *testing.T) {
 	tcs := []struct {
+		resource  string
 		namespace string
 		name      string
 		path      string
@@ -158,22 +158,39 @@ func TestGet(t *testing.T) {
 		want      *unstructured.Unstructured
 	}{
 		{
-			name: "normal_get",
-			path: "/api/gtest/vtest/rtest/normal_get",
-			resp: getJSON("vTest", "rTest", "normal_get"),
-			want: getObject("vTest", "rTest", "normal_get"),
+			resource: "rtest",
+			name:     "normal_get",
+			path:     "/api/gtest/vtest/rtest/normal_get",
+			resp:     getJSON("vTest", "rTest", "normal_get"),
+			want:     getObject("vTest", "rTest", "normal_get"),
 		},
 		{
+			resource:  "rtest",
 			namespace: "nstest",
 			name:      "namespaced_get",
 			path:      "/api/gtest/vtest/namespaces/nstest/rtest/namespaced_get",
 			resp:      getJSON("vTest", "rTest", "namespaced_get"),
 			want:      getObject("vTest", "rTest", "namespaced_get"),
 		},
+		{
+			resource: "rtest/srtest",
+			name:     "normal_subresource_get",
+			path:     "/api/gtest/vtest/rtest/normal_subresource_get/srtest",
+			resp:     getJSON("vTest", "srTest", "normal_subresource_get"),
+			want:     getObject("vTest", "srTest", "normal_subresource_get"),
+		},
+		{
+			resource:  "rtest/srtest",
+			namespace: "nstest",
+			name:      "namespaced_subresource_get",
+			path:      "/api/gtest/vtest/namespaces/nstest/rtest/namespaced_subresource_get/srtest",
+			resp:      getJSON("vTest", "srTest", "namespaced_subresource_get"),
+			want:      getObject("vTest", "srTest", "namespaced_subresource_get"),
+		},
 	}
 	for _, tc := range tcs {
 		gv := &schema.GroupVersion{Group: "gtest", Version: "vtest"}
-		resource := &metav1.APIResource{Name: "rtest", Namespaced: len(tc.namespace) != 0}
+		resource := &metav1.APIResource{Name: tc.resource, Namespaced: len(tc.namespace) != 0}
 		cl, srv, err := getClientServer(gv, func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != "GET" {
 				t.Errorf("Get(%q) got HTTP method %s. wanted GET", tc.name, r.Method)
@@ -192,7 +209,7 @@ func TestGet(t *testing.T) {
 		}
 		defer srv.Close()
 
-		got, err := cl.Resource(resource, tc.namespace).Get(tc.name)
+		got, err := cl.Resource(resource, tc.namespace).Get(tc.name, metav1.GetOptions{})
 		if err != nil {
 			t.Errorf("unexpected error when getting %q: %v", tc.name, err)
 			continue
@@ -294,7 +311,7 @@ func TestDeleteCollection(t *testing.T) {
 		}
 		defer srv.Close()
 
-		err = cl.Resource(resource, tc.namespace).DeleteCollection(nil, &v1.ListOptions{})
+		err = cl.Resource(resource, tc.namespace).DeleteCollection(nil, metav1.ListOptions{})
 		if err != nil {
 			t.Errorf("unexpected error when deleting collection %q: %v", tc.name, err)
 			continue
@@ -304,26 +321,42 @@ func TestDeleteCollection(t *testing.T) {
 
 func TestCreate(t *testing.T) {
 	tcs := []struct {
+		resource  string
 		name      string
 		namespace string
 		obj       *unstructured.Unstructured
 		path      string
 	}{
 		{
-			name: "normal_create",
-			path: "/api/gtest/vtest/rtest",
-			obj:  getObject("vTest", "rTest", "normal_create"),
+			resource: "rtest",
+			name:     "normal_create",
+			path:     "/api/gtest/vtest/rtest",
+			obj:      getObject("vTest", "rTest", "normal_create"),
 		},
 		{
+			resource:  "rtest",
 			name:      "namespaced_create",
 			namespace: "nstest",
 			path:      "/api/gtest/vtest/namespaces/nstest/rtest",
 			obj:       getObject("vTest", "rTest", "namespaced_create"),
 		},
+		{
+			resource: "rtest/srtest",
+			name:     "normal_subresource_create",
+			path:     "/api/gtest/vtest/rtest/normal_subresource_create/srtest",
+			obj:      getObject("vTest", "srTest", "normal_subresource_create"),
+		},
+		{
+			resource:  "rtest/srtest",
+			name:      "namespaced_subresource_create",
+			namespace: "nstest",
+			path:      "/api/gtest/vtest/namespaces/nstest/rtest/namespaced_subresource_create/srtest",
+			obj:       getObject("vTest", "srTest", "namespaced_subresource_create"),
+		},
 	}
 	for _, tc := range tcs {
 		gv := &schema.GroupVersion{Group: "gtest", Version: "vtest"}
-		resource := &metav1.APIResource{Name: "rtest", Namespaced: len(tc.namespace) != 0}
+		resource := &metav1.APIResource{Name: tc.resource, Namespaced: len(tc.namespace) != 0}
 		cl, srv, err := getClientServer(gv, func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != "POST" {
 				t.Errorf("Create(%q) got HTTP method %s. wanted POST", tc.name, r.Method)
@@ -363,26 +396,42 @@ func TestCreate(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	tcs := []struct {
+		resource  string
 		name      string
 		namespace string
 		obj       *unstructured.Unstructured
 		path      string
 	}{
 		{
-			name: "normal_update",
-			path: "/api/gtest/vtest/rtest/normal_update",
-			obj:  getObject("vTest", "rTest", "normal_update"),
+			resource: "rtest",
+			name:     "normal_update",
+			path:     "/api/gtest/vtest/rtest/normal_update",
+			obj:      getObject("vTest", "rTest", "normal_update"),
 		},
 		{
+			resource:  "rtest",
 			name:      "namespaced_update",
 			namespace: "nstest",
 			path:      "/api/gtest/vtest/namespaces/nstest/rtest/namespaced_update",
 			obj:       getObject("vTest", "rTest", "namespaced_update"),
 		},
+		{
+			resource: "rtest/srtest",
+			name:     "normal_subresource_update",
+			path:     "/api/gtest/vtest/rtest/normal_update/srtest",
+			obj:      getObject("vTest", "srTest", "normal_update"),
+		},
+		{
+			resource:  "rtest/srtest",
+			name:      "namespaced_subresource_update",
+			namespace: "nstest",
+			path:      "/api/gtest/vtest/namespaces/nstest/rtest/namespaced_update/srtest",
+			obj:       getObject("vTest", "srTest", "namespaced_update"),
+		},
 	}
 	for _, tc := range tcs {
 		gv := &schema.GroupVersion{Group: "gtest", Version: "vtest"}
-		resource := &metav1.APIResource{Name: "rtest", Namespaced: len(tc.namespace) != 0}
+		resource := &metav1.APIResource{Name: tc.resource, Namespaced: len(tc.namespace) != 0}
 		cl, srv, err := getClientServer(gv, func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != "PUT" {
 				t.Errorf("Update(%q) got HTTP method %s. wanted PUT", tc.name, r.Method)
@@ -426,10 +475,12 @@ func TestWatch(t *testing.T) {
 		namespace string
 		events    []watch.Event
 		path      string
+		query     string
 	}{
 		{
-			name: "normal_watch",
-			path: "/api/gtest/vtest/watch/rtest",
+			name:  "normal_watch",
+			path:  "/api/gtest/vtest/rtest",
+			query: "watch=true",
 			events: []watch.Event{
 				{Type: watch.Added, Object: getObject("vTest", "rTest", "normal_watch")},
 				{Type: watch.Modified, Object: getObject("vTest", "rTest", "normal_watch")},
@@ -439,7 +490,8 @@ func TestWatch(t *testing.T) {
 		{
 			name:      "namespaced_watch",
 			namespace: "nstest",
-			path:      "/api/gtest/vtest/watch/namespaces/nstest/rtest",
+			path:      "/api/gtest/vtest/namespaces/nstest/rtest",
+			query:     "watch=true",
 			events: []watch.Event{
 				{Type: watch.Added, Object: getObject("vTest", "rTest", "namespaced_watch")},
 				{Type: watch.Modified, Object: getObject("vTest", "rTest", "namespaced_watch")},
@@ -458,8 +510,11 @@ func TestWatch(t *testing.T) {
 			if r.URL.Path != tc.path {
 				t.Errorf("Watch(%q) got path %s. wanted %s", tc.name, r.URL.Path, tc.path)
 			}
+			if r.URL.RawQuery != tc.query {
+				t.Errorf("Watch(%q) got query %s. wanted %s", tc.name, r.URL.RawQuery, tc.query)
+			}
 
-			enc := versioned.NewEncoder(streaming.NewEncoder(w, dynamicCodec{}), dynamicCodec{})
+			enc := restclientwatch.NewEncoder(streaming.NewEncoder(w, dynamicCodec{}), dynamicCodec{})
 			for _, e := range tc.events {
 				enc.Encode(&e)
 			}
@@ -470,7 +525,7 @@ func TestWatch(t *testing.T) {
 		}
 		defer srv.Close()
 
-		watcher, err := cl.Resource(resource, tc.namespace).Watch(&v1.ListOptions{})
+		watcher, err := cl.Resource(resource, tc.namespace).Watch(metav1.ListOptions{})
 		if err != nil {
 			t.Errorf("unexpected error when watching %q: %v", tc.name, err)
 			continue
@@ -487,6 +542,7 @@ func TestWatch(t *testing.T) {
 
 func TestPatch(t *testing.T) {
 	tcs := []struct {
+		resource  string
 		name      string
 		namespace string
 		patch     []byte
@@ -494,22 +550,39 @@ func TestPatch(t *testing.T) {
 		path      string
 	}{
 		{
-			name:  "normal_patch",
-			path:  "/api/gtest/vtest/rtest/normal_patch",
-			patch: getJSON("vTest", "rTest", "normal_patch"),
-			want:  getObject("vTest", "rTest", "normal_patch"),
+			resource: "rtest",
+			name:     "normal_patch",
+			path:     "/api/gtest/vtest/rtest/normal_patch",
+			patch:    getJSON("vTest", "rTest", "normal_patch"),
+			want:     getObject("vTest", "rTest", "normal_patch"),
 		},
 		{
+			resource:  "rtest",
 			name:      "namespaced_patch",
 			namespace: "nstest",
 			path:      "/api/gtest/vtest/namespaces/nstest/rtest/namespaced_patch",
 			patch:     getJSON("vTest", "rTest", "namespaced_patch"),
 			want:      getObject("vTest", "rTest", "namespaced_patch"),
 		},
+		{
+			resource: "rtest/srtest",
+			name:     "normal_subresource_patch",
+			path:     "/api/gtest/vtest/rtest/normal_subresource_patch/srtest",
+			patch:    getJSON("vTest", "srTest", "normal_subresource_patch"),
+			want:     getObject("vTest", "srTest", "normal_subresource_patch"),
+		},
+		{
+			resource:  "rtest/srtest",
+			name:      "namespaced_subresource_patch",
+			namespace: "nstest",
+			path:      "/api/gtest/vtest/namespaces/nstest/rtest/namespaced_subresource_patch/srtest",
+			patch:     getJSON("vTest", "srTest", "namespaced_subresource_patch"),
+			want:      getObject("vTest", "srTest", "namespaced_subresource_patch"),
+		},
 	}
 	for _, tc := range tcs {
 		gv := &schema.GroupVersion{Group: "gtest", Version: "vtest"}
-		resource := &metav1.APIResource{Name: "rtest", Namespaced: len(tc.namespace) != 0}
+		resource := &metav1.APIResource{Name: tc.resource, Namespaced: len(tc.namespace) != 0}
 		cl, srv, err := getClientServer(gv, func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != "PATCH" {
 				t.Errorf("Patch(%q) got HTTP method %s. wanted PATCH", tc.name, r.Method)
@@ -520,8 +593,8 @@ func TestPatch(t *testing.T) {
 			}
 
 			content := r.Header.Get("Content-Type")
-			if content != string(api.StrategicMergePatchType) {
-				t.Errorf("Patch(%q) got Content-Type %s. wanted %s", tc.name, content, api.StrategicMergePatchType)
+			if content != string(types.StrategicMergePatchType) {
+				t.Errorf("Patch(%q) got Content-Type %s. wanted %s", tc.name, content, types.StrategicMergePatchType)
 			}
 
 			data, err := ioutil.ReadAll(r.Body)
@@ -540,7 +613,7 @@ func TestPatch(t *testing.T) {
 		}
 		defer srv.Close()
 
-		got, err := cl.Resource(resource, tc.namespace).Patch(tc.name, api.StrategicMergePatchType, tc.patch)
+		got, err := cl.Resource(resource, tc.namespace).Patch(tc.name, types.StrategicMergePatchType, tc.patch)
 		if err != nil {
 			t.Errorf("unexpected error when patching %q: %v", tc.name, err)
 			continue
@@ -549,5 +622,13 @@ func TestPatch(t *testing.T) {
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("Patch(%q) want: %v\ngot: %v", tc.name, tc.want, got)
 		}
+	}
+}
+
+func TestVersionedParameterEncoderWithV1Fallback(t *testing.T) {
+	enc := VersionedParameterEncoderWithV1Fallback
+	_, err := enc.EncodeParameters(&metav1.ListOptions{}, schema.GroupVersion{Group: "foo.bar.com", Version: "v4"})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
 	}
 }

@@ -19,11 +19,11 @@ package dynamic
 import (
 	"fmt"
 
-	"k8s.io/client-go/pkg/api/meta"
-	metav1 "k8s.io/client-go/pkg/apis/meta/v1"
-	"k8s.io/client-go/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/pkg/runtime"
-	"k8s.io/client-go/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // VersionInterfaces provides an object converter and metadata
@@ -84,7 +84,7 @@ func NewObjectTyper(resources []*metav1.APIResourceList) (runtime.ObjectTyper, e
 // information.
 func (ot *ObjectTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
 	if _, ok := obj.(*unstructured.Unstructured); !ok {
-		return nil, false, fmt.Errorf("type %T is invalid for dynamic object typer", obj)
+		return nil, false, fmt.Errorf("type %T is invalid for determining dynamic object types", obj)
 	}
 	return []schema.GroupVersionKind{obj.GetObjectKind().GroupVersionKind()}, false, nil
 }
