@@ -1,0 +1,57 @@
+***** Building GENIE from source tree at: /home/farhana/soft/Genie
+***** The source tree corresponds to GENIE version 2.12.4
+ 
+ 
+** Creating GENIE lib and bin directories...
+cd /home/farhana/soft/Genie && \
+[ -d bin ] || mkdir bin && chmod 755 bin && \
+[ -d lib ] || mkdir lib && chmod 755 lib;
+ 
+** Taking a snapshot of the build environment...
+perl /home/farhana/soft/Genie/src/scripts/setup/genie-build-env-snapshot
+ 
+** Adding automatically generated code...
+perl /home/farhana/soft/Genie/src/scripts/setup/genie-write-gbuild
+perl /home/farhana/soft/Genie/src/scripts/setup/genie-write-gversion
+ 
+** Building base-framework...
+cd /home/farhana/soft/Genie/src && \
+cd Algorithm &&  make && cd .. && \
+cd Messenger &&  make && cd .. && \
+cd Registry && make && \
+cd /home/farhana/soft/Genie
+make[1]: Entering directory '/home/farhana/soft/Genie/src/Algorithm'
+rm -f _ROOT_DICT_Algorithm.*
+[package: Algorithm] Generating ROOT dictionary ...
+rootcint -f _ROOT_DICT_Algorithm.cc -c  -I/usr/include/libxml2  -I/usr/include -I/usr/include/root -I/home/farhana/soft/lhapdf/include/ -I/home/farhana/soft/Genie/src/  AlgId.h AlgConfigPool.h AlgFactory.h Algorithm.h LinkDef.h
+#error "You need a ISO C conforming compiler to use the glibc headers"
+Error: Missing one of '
+\/' expected at or after line 97.
+Error: Unexpected end of file (G__fgetstream():2) /usr/include/sys/cdefs.h:436:
+Error: Symbol extern"C"{#define __need_size_t#define __need_NULL#include<stddef is not defined in current scope  /usr/include/stdio.h:44:
+Error: Failed to evaluate extern"C"{#define __need_size_t#define __need_NULL#include<stddef.h>#include<bits/types
+Error: Failed to evaluate extern"C"{#define __need_size_t#define __need_NULL#include<stddef.h>#include<bits/types.h>#define __need_FILE#define __need___FILE#endif#if!defined __FILE_defined&&defined __need_FILE struct _IO_FILE
+Error: Symbol __BEGIN_NAMESPACE_STD typedef struct _IO_FILE FILE is not defined in current scope  /usr/include/stdio.h:48:
+Error: Missing one of '{' expected at or after line 90.
+Error: Unexpected end of file (G__fignorestream():3) /usr/include/stdio.h:947:
+Error: Missing one of '{' expected at or after line 517.
+Error: Unexpected end of file (G__fignorestream():3) /usr/include/string.h:646:
+Error: Symbol div_t is not defined in current scope  /usr/include/stdlib.h:101:
+Error: Symbol lldiv_t is not defined in current scope  /usr/include/stdlib.h:121:
+Error: Missing one of '{' expected at or after line 466.
+Error: Unexpected end of file (G__fignorestream():3) /usr/include/stdlib.h:970:
+Error: Missing whitespace at or after line 490.
+Error: Unexpected end of file (G__fgetspace():2) /usr/include/math.h:493:
+Report: Unrecognized string '__END_DECLS' ignored /usr/include/math.h:494:
+Error: Missing one of '{' expected at or after line 69.
+Error: Unexpected end of file (G__fignorestream():3) /usr/include/assert.h:120:
+Warning: Error occurred during reading source files
+Warning: Error occurred during dictionary source generation
+!!!Removing _ROOT_DICT_Algorithm.cc _ROOT_DICT_Algorithm.h !!!
+Error: rootcint: error loading headers...
+/home/farhana/soft/Genie/src/make/Make.std-package-targets:48: recipe for target '_ROOT_DICT_Algorithm.cc' failed
+make[1]: *** [_ROOT_DICT_Algorithm.cc] Error 1
+make[1]: Leaving directory '/home/farhana/soft/Genie/src/Algorithm'
+Makefile:64: recipe for target 'base-framework' failed
+make: *** [base-framework] Error 2
+[farhana@localhost Genie]$ uname -a
