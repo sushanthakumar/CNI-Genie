@@ -1,0 +1,7 @@
+# ServiceToken: ""
+
+# By default, complete genie package will be installed including multi networking plugin feature, admission controller
+#and network policy controller. In case only multi networking feature is needed, set below flag to false
+features:
+  ##
+  genieCompleteMode: false

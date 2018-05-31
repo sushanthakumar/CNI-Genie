@@ -1,0 +1,100 @@
+# ClusterRole for genie plugin
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: genie
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - update
+      - patch
+      - list
+      - watch
+  - apiGroups:
+      - "alpha.network.k8s.io"
+    resources:
+      - logicalnetworks
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - "alpha.network.k8s.io"
+    resources:
+      - physicalnetworks
+    verbs:
+      - get
+      - update
+---
+# ClusterRole for genie controllers
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: genie-controller
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+  - apiGroups:
+      - "admissionregistration.k8s.io"
+    resources:
+      - validatingwebhookconfigurations
+    verbs:
+      - get
+      - update
+      - create
+      - delete
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: genie
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: genie
+subjects:
+- kind: ServiceAccount
+  name: genie
+  namespace: kube-system
+- kind: ServiceAccount
+  name: genie-controller
+  namespace: kube-system
+- kind: Group
+  name: system:authenticated
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: genie-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: genie-controller
+subjects:
+- kind: ServiceAccount
+  name: genie-controller
+  namespace: kube-system
